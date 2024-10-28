@@ -1,6 +1,10 @@
-import os
+import os, math
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.subplots as sp 
+import cv2 as cv
 from typing import Tuple
 
 def standardize_image():
@@ -74,3 +78,46 @@ def load_split_images(
     test_images = [plt.imread(path) for path in test_image_paths]
     
     return (train_domains, train_labels, train_image_paths, train_images), (val_domains, val_labels, val_image_paths, val_images), (test_domains, test_labels, test_image_paths, test_images)
+
+def create_image_fig(images, images_per_row=3, titles=None):
+    """
+    returns a fig containing an arbitrary number of images. 
+    
+    
+    Args
+        images: list of images to display
+    Returns
+        figure containing the images
+    """
+    # get number of rows needed
+    num_images = len(images)
+    num_rows = math.ceil(num_images / images_per_row)
+
+    if titles is None:
+        titles = [f"Img {i+1}" for i in range(num_images)]
+    # create subplot grid
+    fig = sp.make_subplots(
+        rows=num_rows, 
+        cols=images_per_row, 
+        subplot_titles=titles,
+        horizontal_spacing=0,
+        vertical_spacing=0.1
+    )
+
+    # add images to each subplot
+    for idx, img in enumerate(images):
+        row = (idx // images_per_row) + 1
+        col = (idx % images_per_row) + 1
+        fig.add_trace(go.Image(z=img), row=row, col=col)
+
+    fig.update_layout(
+        showlegend=False,
+        height=300 * num_rows,
+        width=900,
+        margin=dict(l=5, r=5, t=30, b=5)
+    )
+
+    # remove axis ticks
+    fig.update_xaxes(showticklabels=False).update_yaxes(showticklabels=False)
+
+    return fig
