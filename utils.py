@@ -121,3 +121,41 @@ def create_image_fig(images, images_per_row=3, titles=None):
     fig.update_xaxes(showticklabels=False).update_yaxes(showticklabels=False)
 
     return fig
+
+def visualize_corners(img, maxCorners=25, qualityLevel=0.2, minDistance=5):
+    """ Applies shi-tomasi corner detection
+        
+        Args
+            img: grayscale version of image
+            maxCorners: maximum amount of corners to find. corners are sorted by quality
+                and only the top n corners are retrieved
+            qualityLevel: how "corner-like" a point must be before it's considered a corner.
+                in shi-tomasi corner detection, a corner is edge-like if there's a high intensity
+                derivative in the x AND y directions.
+            minDistance: the minimum distance between each corner that's identified. If two corners
+                are identified but are too close, the one with a higher qualityLevel is kept
+        Returns
+            list of image coordinates where corners are
+            also displays a plot of corners on the image
+            
+    """
+    
+    gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    corners = cv.goodFeaturesToTrack(gray_img, maxCorners=maxCorners, qualityLevel=qualityLevel, minDistance=minDistance, useHarrisDetector=False)
+    fig = px.imshow(img, width=300, height=300)
+    fig.update_yaxes(visible=False, showticklabels=False)
+    fig.update_xaxes(visible=False, showticklabels=False)
+    fig.update_layout(margin=dict(l=5, r=5, t=30, b=5))
+    
+    if corners is not None:
+        corners = corners[:,0,:]
+        scatter = go.Scatter(
+            x=[x for x, y in corners], 
+            y=[y for x, y in corners],
+            mode='markers',
+            marker=dict(color='red', size=10),
+            name='Points'
+        )
+        fig.add_trace(scatter)
+    fig.show()
+    return corners
