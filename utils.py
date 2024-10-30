@@ -163,3 +163,69 @@ def visualize_corners(img, maxCorners=25, qualityLevel=0.2, minDistance=5):
         fig.add_trace(scatter)
     fig.show()
     return corners
+
+
+
+def get_mean_intensity_rgb(imgs: np.ndarray) -> list:
+    """Returns the mean intensity of each color channel (Red, Green, Blue) for a list of images.
+    
+    Args:
+        imgs (list or np.ndarray): A list of images or a single image represented as numpy arrays. 
+                                   Each image should have shape (height, width, channels).
+    Returns:
+        list: A list containing the mean intensity of each color channel (Red, Green, Blue), 
+              rounded to 2 decimal places.
+    """
+    # If the input is a single image, convert it to a list of images
+    if isinstance(imgs, np.ndarray):
+        imgs = [imgs]
+
+    # Loop over each color channel (Red, Green, Blue)
+    mean_intensities_all_imgs = []
+    for i in range(3):
+        mean_intensities_this_color = []
+        for img in imgs:
+            if np.ndim(img) == 3: # We need to skip grayscale images for this (one of the laptop images was throwing an error bc of this)
+                mean_intensity = np.mean(img[:, :, i])
+                mean_intensities_this_color.append(mean_intensity)
+            else:
+                continue
+        mean_intensities_all_imgs.append(np.mean(mean_intensities_this_color))
+
+    return [round(i, 2) for i in mean_intensities_all_imgs]
+
+
+def plot_color_histogram(img, label, max_color_intensity = 256) -> plt.figure:
+    """Plots the color histogram of an image and returns the plot figure.
+
+    This function generates and plots the histogram for each color channel (red, green, and blue) of the input image.
+    It also fills the area under the histogram curve with a semi-transparent color. The x-axis represents the intensity
+    values (0-255), and the y-axis represents the frequency of these intensity values.
+
+    Args:
+        img (numpy.ndarray): The input image for which the color histogram is to be plotted.
+        label (str): The label or title for the histogram plot.
+        max_color_intensity (int): The maximum intensity value for the color channels (default = 256). 
+            This is a cheap easy way to omit the all white pixels, might want to improve this later on. 
+
+    Returns:
+        (matplotlib.figure.Figure): The figure object containing the histogram plot.
+    """
+    color = ('r', 'g', 'b')
+
+    plt.figure(figsize=(5, 5))
+    for i, col in enumerate(color):
+        histr = cv.calcHist(
+            images=img, 
+            channels=[i],
+            mask=None, 
+            histSize=[max_color_intensity], 
+            ranges=[0, max_color_intensity]
+        )
+        plt.plot(histr, color=col)
+        plt.fill_between(range(max_color_intensity), histr[:, 0], color=col, alpha=0.1)
+
+    plt.xlim([0, max_color_intensity])
+    # plt.ylim([0, 3000])
+    plt.title(f'Color Histogram - {label}')
+    return plt.gcf()
