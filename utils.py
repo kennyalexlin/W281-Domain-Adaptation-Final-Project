@@ -26,6 +26,10 @@ def load_split_images(
             test_val_split: proportion of the test and val images to use in the test set
                 the proportion to use in the val set is (1 - test_val_split)
             seed: random seed for shuffling test_val_split
+        
+        Returns
+            tuple of Train, Val, and Test splits, each of the form (domains (np.array[str], labels (np.array[str]), image_paths (np.array[str]), images list) \
+            with dtypes (np.array[str], np.array[str], np.array[str], list[np.array])
     """
     
     # TODO - standardize image size in train, test, and validation sets
