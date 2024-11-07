@@ -112,8 +112,8 @@ def create_image_fig(images, images_per_row=3, titles=None):
 
     fig.update_layout(
         showlegend=False,
-        height=300 * num_rows,
-        width=900,
+        height=200 * num_rows,
+        width=250 * images_per_row,
         margin=dict(l=5, r=5, t=30, b=5)
     )
 
@@ -122,7 +122,7 @@ def create_image_fig(images, images_per_row=3, titles=None):
 
     return fig
 
-def visualize_corners(img, maxCorners=25, qualityLevel=0.2, minDistance=5):
+def visualize_corners(img, maxCorners=25, qualityLevel=0.2, minDistance=5, apply_canny=False, show_canny=False):
     """ Applies shi-tomasi corner detection
         
         Args
@@ -141,7 +141,11 @@ def visualize_corners(img, maxCorners=25, qualityLevel=0.2, minDistance=5):
     """
     
     gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    if apply_canny:
+        gray_img = cv.Canny(gray_img, 100, 200)
     corners = cv.goodFeaturesToTrack(gray_img, maxCorners=maxCorners, qualityLevel=qualityLevel, minDistance=minDistance, useHarrisDetector=False)
+    if show_canny:
+        img = gray_img
     fig = px.imshow(img, width=300, height=300)
     fig.update_yaxes(visible=False, showticklabels=False)
     fig.update_xaxes(visible=False, showticklabels=False)
@@ -157,5 +161,4 @@ def visualize_corners(img, maxCorners=25, qualityLevel=0.2, minDistance=5):
             name='Points'
         )
         fig.add_trace(scatter)
-    fig.show()
-    return corners
+    return corners, fig
