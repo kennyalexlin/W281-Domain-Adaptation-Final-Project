@@ -1,0 +1,16 @@
+[33mcommit fdde9ff7cbc9a0fe554d046601a5de02c75e0b42[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mlbp_glcm_gabor_resnet[m[33m)[m
+Author: radonco <josephchan@berkeley.edu>
+Date:   Sat Nov 9 21:21:45 2024 +1100
+
+    09112024
+
+ data/cifar-10-batches-py/batches.meta | Bin [31m158[m -> [32m0[m bytes
+ data/cifar-10-batches-py/data_batch_1 | Bin [31m31035704[m -> [32m0[m bytes
+ data/cifar-10-batches-py/data_batch_2 | Bin [31m31035320[m -> [32m0[m bytes
+ data/cifar-10-batches-py/data_batch_3 | Bin [31m31035999[m -> [32m0[m bytes
+ data/cifar-10-batches-py/data_batch_4 | Bin [31m31035696[m -> [32m0[m bytes
+ data/cifar-10-batches-py/data_batch_5 | Bin [31m31035623[m -> [32m0[m bytes
+ data/cifar-10-batches-py/readme.html  |   1 [31m-[m
+ data/cifar-10-batches-py/test_batch   | Bin [31m31035526[m -> [32m0[m bytes
+ data/cifar-10-python.tar.gz           | Bin [31m170498071[m -> [32m0[m bytes
+ 9 files changed, 1 deletion(-)
