@@ -205,7 +205,7 @@ def split_images(
     np.random.seed(seed)
 
     train_images, train_labels = [], []
-    val_images, val_labels = []
+    val_images, val_labels = [], []
     test_images, test_labels = [], []
 
     # Handle training domains
