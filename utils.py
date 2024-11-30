@@ -1,11 +1,20 @@
 import os, math
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.subplots as sp 
 import cv2 as cv
 from typing import Tuple
+from skimage.feature import local_binary_pattern, graycomatrix, graycoprops
+from skimage.filters import gabor  
+from skimage.color import rgb2gray
+import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
 
 def standardize_image(image, target_size=(300, 300), method="pad", color=(0, 0, 0)):
     """
@@ -158,19 +167,30 @@ def load_images_by_domain(img_dir, target_size=(300, 300), method="pad", seed=88
 
     return data_by_domain
 
+import numpy as np
+import math
+from typing import Dict, List, Tuple
+
+import numpy as np
+import math
+from typing import Dict, List, Tuple
+
+import numpy as np
+import math
+from typing import Dict, List, Tuple
+
 def split_images(
-    data_by_domain,
-    train_domains=["amazon", "caltech10"],
-    test_domains=["dslr"],
-    train_split=0.8,
-    val_split=0.2,
-    use_train_for_test=False,  # New argument to use part of train domains as test set
-    test_split=0.0,            # Proportion of train domains to reserve for testing
-    seed=888,
-    combine_train=False,
-):
+    data_by_domain: Dict[str, Tuple[np.ndarray, np.ndarray]],
+    train_domains: List[str] = ["amazon", "caltech10"],
+    test_domains: List[str] = ["dslr"],
+    train_split: float = 0.6,
+    val_split: float = 0.2,
+    use_train_for_test: bool = False,
+    test_split: float = 0.2,
+    seed: int = 888,
+) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, np.ndarray]]:
     """
-    Split images into train, validation, and test sets, ensuring train + val + test = 1.0.
+    Split images into train, validation, and test sets.
 
     Args:
         data_by_domain (dict): Output of `load_images_by_domain`.
@@ -181,80 +201,93 @@ def split_images(
         use_train_for_test (bool): Whether to use part of the train domains as the test set.
         test_split (float): Proportion of train domains to reserve for testing if `use_train_for_test` is True.
         seed (int): Random seed for reproducibility.
-        combine_train (bool): Whether to combine all train domains into a single training set.
 
     Returns:
         tuple: Train, validation, and test splits as dictionaries of (images, labels).
     """
-    # Ensure train + val + test = 1.0
+    np.random.seed(seed)
+
+    # Initialize containers
+    train_images, train_labels = [], []
+    val_images, val_labels = [], []
+    test_images, test_labels = [], []
+
+    # Validate split proportions
     if use_train_for_test:
         total_split = train_split + val_split + test_split
         if not math.isclose(total_split, 1.0, rel_tol=1e-6):
             raise ValueError(
-                f"Invalid splits: train_split ({train_split}), val_split ({val_split}), "
-                f"and test_split ({test_split}) must sum to 1.0. Currently, they sum to {total_split}."
+                f"train_split + val_split + test_split must sum to 1.0 when use_train_for_test is True. "
+                f"Current sum is {total_split}."
             )
     else:
         total_split = train_split + val_split
         if not math.isclose(total_split, 1.0, rel_tol=1e-6):
             raise ValueError(
-                f"Invalid splits: train_split ({train_split}) and val_split ({val_split}) "
-                f"must sum to 1.0 when not using train for test. Currently, they sum to {total_split}."
+                f"train_split + val_split must sum to 1.0 when use_train_for_test is False. "
+                f"Current sum is {total_split}."
             )
 
-    np.random.seed(seed)
+    # Function to split data
+    def split_data(images: np.ndarray, labels: np.ndarray, splits: Tuple[float, float, float] = (1.0, 0.0, 0.0)):
+        idx = np.random.permutation(len(images))
+        n_total = len(images)
+        n_train = int(n_total * splits[0])
+        n_val = int(n_total * splits[1])
+        n_test = n_total - n_train - n_val  # Ensure all samples are used
 
-    train_images, train_labels = [], []
-    val_images, val_labels = [], []
-    test_images, test_labels = [], []
+        train_imgs = images[idx[:n_train]]
+        train_lbls = labels[idx[:n_train]]
 
-    # Handle training domains
+        val_imgs = images[idx[n_train:n_train + n_val]]
+        val_lbls = labels[idx[n_train:n_train + n_val]]
+
+        test_imgs = images[idx[n_train + n_val:]]
+        test_lbls = labels[idx[n_train + n_val:]]
+
+        return train_imgs, train_lbls, val_imgs, val_lbls, test_imgs, test_lbls
+
+    # Handle train domains
     for domain in train_domains:
         images, labels = data_by_domain[domain]
-        idx = np.arange(len(images))
-        np.random.shuffle(idx)
-
         if use_train_for_test:
-            # Split train domain into train, validation, and test subsets
-            test_split_point = int(len(images) * test_split)
-            train_split_point = int(len(images[test_split_point:]) * train_split)
-
-            test_images.extend(images[idx[:test_split_point]])
-            test_labels.extend(labels[idx[:test_split_point]])
-
-            train_images.append(images[idx[test_split_point:test_split_point + train_split_point]])
-            train_labels.append(labels[idx[test_split_point:test_split_point + train_split_point]])
-
-            val_images.append(images[idx[test_split_point + train_split_point:]])
-            val_labels.append(labels[idx[test_split_point + train_split_point:]])
+            splits = (train_split, val_split, test_split)
         else:
-            # Standard train/val split without reserving for test
-            split_point = int(len(images) * train_split)
-            train_images.append(images[idx[:split_point]])
-            train_labels.append(labels[idx[:split_point]])
+            splits = (train_split, val_split, 0.0)
+        t_imgs, t_lbls, v_imgs, v_lbls, te_imgs, te_lbls = split_data(images, labels, splits)
+        train_images.append(t_imgs)
+        train_labels.append(t_lbls)
+        val_images.append(v_imgs)
+        val_labels.append(v_lbls)
+        if use_train_for_test:
+            test_images.append(te_imgs)
+            test_labels.append(te_lbls)
 
-            val_images.append(images[idx[split_point:]])
-            val_labels.append(labels[idx[split_point:]])
-
-    if combine_train:
-        train_images = [img for domain_imgs in train_images for img in domain_imgs]
-        train_labels = [lbl for domain_lbls in train_labels for lbl in domain_lbls]
-        val_images = [img for domain_imgs in val_images for img in domain_imgs]
-        val_labels = [lbl for domain_lbls in val_labels for lbl in domain_lbls]
-
-    train_data = {"images": np.array(train_images), "labels": np.array(train_labels)}
-    val_data = {"images": np.array(val_images), "labels": np.array(val_labels)}
-
-    # Handle test domains (if not using train for test)
+    # Handle test domains
     if not use_train_for_test:
         for domain in test_domains:
             images, labels = data_by_domain[domain]
-            test_images.extend(images)
-            test_labels.extend(labels)
+            test_images.append(images)
+            test_labels.append(labels)
 
-    test_data = {"images": np.array(test_images), "labels": np.array(test_labels)}
+    # Concatenate all splits
+    def concatenate_splits(splits_list: List[np.ndarray]) -> np.ndarray:
+        return np.concatenate(splits_list) if splits_list else np.array([], dtype=np.float32)
 
-    return train_data, val_data, test_data
+    train_images = concatenate_splits(train_images)
+    train_labels = concatenate_splits(train_labels)
+    val_images = concatenate_splits(val_images)
+    val_labels = concatenate_splits(val_labels)
+    test_images = concatenate_splits(test_images)
+    test_labels = concatenate_splits(test_labels)
+
+    # **Removed label conversion to integers**
+
+    return (
+        {"images": train_images, "labels": train_labels},
+        {"images": val_images, "labels": val_labels},
+        {"images": test_images, "labels": test_labels},
+    )
 
 def create_image_fig(images, images_per_row=3, titles=None):
     """
@@ -435,6 +468,29 @@ def plot_color_histogram(imgs, label, intensity_filter: list = [0, 256]) -> plt.
     plt.title(f'Color Histogram - {label}')
     return plt.gca()
 
+def convert_to_grayscale(image):
+    """
+    Convert an image to grayscale if it's in RGB/BGR/RGBA format.
+
+    Args:
+        image (np.array): Input image.
+
+    Returns:
+        np.array: Grayscale image.
+    """
+    if len(image.shape) == 3:
+        if image.shape[2] == 4:
+            # Convert RGBA to Grayscale
+            image = cv.cvtColor(image, cv.COLOR_BGRA2GRAY)
+        else:
+            # Convert BGR to Grayscale
+            image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    elif len(image.shape) == 4:
+        # Handle images with multiple channels, e.g., batch size
+        # This depends on your data structure; adjust accordingly
+        raise ValueError(f"Unexpected image shape: {image.shape}")
+    return image
+
 def compute_multiscale_lbp_features(image, PR_combinations):
     """
     compute multi-scale LBP features from an image.
@@ -506,19 +562,53 @@ def compute_gabor_features(image, frequencies, angles):
             ])
     return np.array(gabor_features)
 
-def extract_resnet_penultimate_features(split_data, batch_size=16, device=None, num_classes=10):
+class CustomDataset(Dataset):
+    def __init__(self, images, labels, transform=None):
+        """
+        Custom Dataset for loading images and labels.
+
+        Args:
+            images (list or np.array): List or array of images.
+            labels (list or np.array): Corresponding integer labels.
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        self.images = images
+        self.labels = labels  # Labels are integers
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        label = self.labels[idx]
+
+        if self.transform:
+            image = self.transform(image)
+
+        # Ensure label is an integer
+        if not isinstance(label, int):
+            raise TypeError(f"Label '{label}' at index {idx} is not an integer.")
+
+        # Convert label to tensor
+        label = torch.tensor(label, dtype=torch.long)
+
+        return image, label
+
+def extract_resnet_features_split(split_data, split_name, batch_size=16, device=None, num_classes=10, int_to_label=None):
     """
-    Extract penultimate layer features from a ResNet101 model for a given dataset split.
+    Extract ResNet101 penultimate layer features for all images in a data split and save to CSV.
 
     Args:
-        split_data (dict): Dataset split containing "images" and "labels".
+        split_data (dict): Dictionary with keys 'images' and 'labels'.
+        split_name (str): Name of the data split ('train', 'val', 'test').
         batch_size (int): Batch size for DataLoader.
         device (torch.device): PyTorch device (CPU or GPU). If None, defaults to CUDA if available.
         num_classes (int): Number of classes for the ResNet model.
+        int_to_label (dict): Mapping from integer labels to class names.
 
     Returns:
-        np.array: Penultimate layer features.
-        np.array: Corresponding labels.
+        pd.DataFrame: DataFrame containing ResNet features and labels.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -532,32 +622,47 @@ def extract_resnet_penultimate_features(split_data, batch_size=16, device=None, 
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    # Create DataLoader
+    # Create DataLoader using CustomDataset
     dataset = CustomDataset(split_data["images"], split_data["labels"], transform=transform)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
     # Load ResNet101 pre-trained model
     model = models.resnet101(weights="IMAGENET1K_V1")
     num_ftrs = model.fc.in_features
-    model.fc = torch.nn.Linear(num_ftrs, num_classes)  # Replace final layer
+    model.fc = nn.Identity()  # Remove the final classification layer
     model = model.to(device)
-
-    # Extract the penultimate layer
-    penultimate_layer_model = torch.nn.Sequential(*list(model.children())[:-1])  # Remove last layer
-    penultimate_layer_model.eval()
+    model.eval()  # Set model to evaluation mode
 
     features = []
-    labels = []
+    labels = split_data['labels']
+
+    print(f"Extracting ResNet features from {len(split_data['images'])} images for '{split_name}' split...")
 
     with torch.no_grad():
-        for images, batch_labels in tqdm(dataloader, desc="Extracting Penultimate Features"):
+        for images, _ in tqdm(dataloader, desc=f"Extracting ResNet Features ({split_name} split)"):
             images = images.to(device)
-            batch_features = penultimate_layer_model(images)
-            features.append(batch_features.view(batch_features.size(0), -1).cpu().numpy())  # Flatten features
-            labels.append(batch_labels.numpy())
+            batch_features = model(images)
+            batch_features = batch_features.view(batch_features.size(0), -1)  # Flatten features
+            features.append(batch_features.cpu().numpy())
 
-    # Combine all batches into single arrays
-    features = np.concatenate(features, axis=0)
-    labels = np.concatenate(labels, axis=0)
+    # Combine all batches into a single array
+    feature_array = np.concatenate(features, axis=0)
 
-    return features, labels
+    # Create descriptive feature names
+    feature_columns = [f"ResNet_feature_{i}" for i in range(feature_array.shape[1])]
+
+    # Create DataFrame
+    df = pd.DataFrame(feature_array, columns=feature_columns)
+    if int_to_label is not None:
+        # Map integer labels to class names for the label column
+        df['label'] = [int_to_label[label] for label in labels]
+    else:
+        # If no mapping is provided, use integer labels
+        df['label'] = labels
+        
+    # Save features to CSV
+    csv_filename = f"{split_name}_resnet_features.csv"
+    df.to_csv(csv_filename, index=False)
+    print(f"ResNet feature extraction and saving completed for '{split_name}' split. Saved to '{csv_filename}'.")
+
+    return df
