@@ -800,6 +800,8 @@ def compute_resnet_features(dataset_splits, splits_to_process, batch_size=16, sa
             continue
 
         print(f"Processing {split_name} split...")
+
+        # Convert labels to integers for this split
         split_data_int = convert_labels_to_int(dataset_splits[split_name])
 
         # Extract ResNet features for the split
@@ -813,7 +815,10 @@ def compute_resnet_features(dataset_splits, splits_to_process, batch_size=16, sa
 
         # Save to 'features' subdirectory if required
         if save_csv:
-            output_path = os.path.join(output_dir, f"{split_name}_resnet_features.csv")
+            # Add domain information to the filename if available
+            domain_prefix = dataset_splits[split_name].get("domain", "").lower()
+            filename_prefix = f"{domain_prefix}_" if domain_prefix else ""
+            output_path = os.path.join(output_dir, f"{filename_prefix}{split_name}_resnet_features.csv")
             df.to_csv(output_path, index=False)
             print(f"Saved {split_name} features to '{output_path}'.")
 
