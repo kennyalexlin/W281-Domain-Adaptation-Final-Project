@@ -15,6 +15,8 @@ import torch.nn as nn
 from torchvision import models, transforms
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import math
+from typing import Dict, List, Tuple
 
 def standardize_image(image, target_size=(300, 300), method="pad", color=(0, 0, 0)):
     """
@@ -167,18 +169,6 @@ def load_images_by_domain(img_dir, target_size=(300, 300), method="pad", seed=88
 
     return data_by_domain
 
-import numpy as np
-import math
-from typing import Dict, List, Tuple
-
-import numpy as np
-import math
-from typing import Dict, List, Tuple
-
-import numpy as np
-import math
-from typing import Dict, List, Tuple
-
 def split_images(
     data_by_domain: Dict[str, Tuple[np.ndarray, np.ndarray]],
     train_domains: List[str] = ["amazon", "caltech10"],
@@ -222,9 +212,13 @@ def split_images(
             )
     else:
         total_split = train_split + val_split
-        if not math.isclose(total_split, 1.0, rel_tol=1e-6):
+        # Allow test_split=1.0 when no training/validation is needed
+        if test_split == 1.0 and train_split == 0.0 and val_split == 0.0:
+            total_split = 1.0
+        elif not math.isclose(total_split, 1.0, rel_tol=1e-6):
             raise ValueError(
-                f"train_split + val_split must sum to 1.0 when use_train_for_test is False. "
+                f"train_split + val_split must sum to 1.0 when use_train_for_test is False, "
+                f"or test_split must equal 1.0 when train_split and val_split are 0. "
                 f"Current sum is {total_split}."
             )
 
@@ -493,7 +487,7 @@ def convert_to_grayscale(image):
 
 def compute_multiscale_lbp_features(image, PR_combinations):
     """
-    compute multi-scale LBP features from an image.
+    Compute multi-scale LBP features from an image.
     Args:
         image (np.array): Grayscale image
         PR_combinations (list of tuples): List of (P, R) combinations to use
@@ -510,6 +504,37 @@ def compute_multiscale_lbp_features(image, PR_combinations):
         multiscale_features.extend(lbp_hist)
     return np.array(multiscale_features)
 
+def extract_lbp_features(split_data, PR_combinations):
+    """
+    Extract LBP features for all images in a data split.
+
+    Args:
+        split_data (dict): Dictionary with keys 'images' and 'labels'.
+        PR_combinations (list of tuples): LBP (P, R) combinations.
+
+    Returns:
+        pd.DataFrame: DataFrame containing LBP features and labels.
+    """
+    features = []
+    labels = split_data['labels']
+
+    print(f"Extracting LBP features from {len(split_data['images'])} images...")
+
+    for img in tqdm(split_data['images']):
+        # Ensure the image is grayscale and in uint8 format
+        img_gray = convert_to_grayscale(img)
+        img_gray = (img_gray * 255).astype(np.uint8) if img_gray.max() <= 1.0 else img_gray.astype(np.uint8)
+
+        # Extract LBP features
+        lbp_features = compute_multiscale_lbp_features(img_gray, PR_combinations)
+        features.append(lbp_features)
+
+    # Create DataFrame
+    feature_array = np.array(features)
+    feature_columns = [f"LBP_feature_{i}" for i in range(feature_array.shape[1])]
+    df = pd.DataFrame(feature_array, columns=feature_columns)
+    df['label'] = labels
+    return df
 
 def compute_glcm_features(image, distances, angles):
     """
@@ -534,6 +559,38 @@ def compute_glcm_features(image, distances, angles):
             ])
     return np.array(glcm_features)
 
+def extract_glcm_features_split(split_data, glcm_distances, glcm_angles):
+    """
+    Extract GLCM features for all images in a data split.
+
+    Args:
+        split_data (dict): Dictionary with keys 'images' and 'labels'.
+        glcm_distances (list): GLCM distances.
+        glcm_angles (list): GLCM angles.
+
+    Returns:
+        pd.DataFrame: DataFrame containing GLCM features and labels.
+    """
+    features = []
+    labels = split_data['labels']
+
+    print(f"Extracting GLCM features from {len(split_data['images'])} images...")
+
+    for img in tqdm(split_data['images']):
+        # Ensure the image is grayscale and in uint8 format
+        img_gray = convert_to_grayscale(img)
+        img_gray = (img_gray * 255).astype(np.uint8) if img_gray.max() <= 1.0 else img_gray.astype(np.uint8)
+
+        # Extract GLCM features
+        glcm_features = compute_glcm_features(img_gray, glcm_distances, glcm_angles)
+        features.append(glcm_features)
+
+    # Create DataFrame
+    feature_array = np.array(features)
+    feature_columns = [f"GLCM_feature_{i}" for i in range(feature_array.shape[1])]
+    df = pd.DataFrame(feature_array, columns=feature_columns)
+    df['label'] = labels
+    return df
 
 def compute_gabor_features(image, frequencies, angles):
     """
@@ -562,6 +619,45 @@ def compute_gabor_features(image, frequencies, angles):
             ])
     return np.array(gabor_features)
 
+def extract_gabor_features_split(split_data, gabor_frequencies, gabor_angles):
+    """
+    Extract Gabor features for all images in a data split.
+
+    Args:
+        split_data (dict): Dictionary with keys 'images' and 'labels'.
+        gabor_frequencies (list): Gabor frequencies.
+        gabor_angles (list): Gabor angles.
+
+    Returns:
+        pd.DataFrame: DataFrame containing Gabor features and labels.
+    """
+    features = []
+    labels = split_data['labels']
+
+    print(f"Extracting Gabor features from {len(split_data['images'])} images...")
+
+    for img in tqdm(split_data['images']):
+        # Convert to grayscale
+        img_gray = convert_to_grayscale(img)
+
+        # Ensure image is in uint8 format
+        if img_gray.dtype != np.uint8:
+            if img_gray.max() <= 1.0:
+                img_gray = (img_gray * 255).astype(np.uint8)
+            else:
+                img_gray = img_gray.astype(np.uint8)
+
+        # Extract Gabor features
+        gabor_feat = compute_gabor_features(img_gray, gabor_frequencies, gabor_angles)
+        features.append(gabor_feat)
+
+    # Create DataFrame
+    feature_array = np.array(features)
+    feature_columns = [f"Gabor_feature_{i}" for i in range(feature_array.shape[1])]
+    df = pd.DataFrame(feature_array, columns=feature_columns)
+    df['label'] = labels
+    return df
+
 class CustomDataset(Dataset):
     def __init__(self, images, labels, transform=None):
         """
@@ -573,7 +669,7 @@ class CustomDataset(Dataset):
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         self.images = images
-        self.labels = labels  # Labels are integers
+        self.labels = labels
         self.transform = transform
 
     def __len__(self):
@@ -595,9 +691,10 @@ class CustomDataset(Dataset):
 
         return image, label
 
+
 def extract_resnet_features_split(split_data, split_name, batch_size=16, device=None, num_classes=10, int_to_label=None):
     """
-    Extract ResNet101 penultimate layer features for all images in a data split and save to CSV.
+    Extract ResNet101 penultimate layer features for all images in a data split.
 
     Args:
         split_data (dict): Dictionary with keys 'images' and 'labels'.
@@ -628,8 +725,7 @@ def extract_resnet_features_split(split_data, split_name, batch_size=16, device=
 
     # Load ResNet101 pre-trained model
     model = models.resnet101(weights="IMAGENET1K_V1")
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Identity()  # Remove the final classification layer
+    model.fc = torch.nn.Identity()  # Remove the final classification layer
     model = model.to(device)
     model.eval()  # Set model to evaluation mode
 
@@ -642,7 +738,6 @@ def extract_resnet_features_split(split_data, split_name, batch_size=16, device=
         for images, _ in tqdm(dataloader, desc=f"Extracting ResNet Features ({split_name} split)"):
             images = images.to(device)
             batch_features = model(images)
-            batch_features = batch_features.view(batch_features.size(0), -1)  # Flatten features
             features.append(batch_features.cpu().numpy())
 
     # Combine all batches into a single array
@@ -654,15 +749,74 @@ def extract_resnet_features_split(split_data, split_name, batch_size=16, device=
     # Create DataFrame
     df = pd.DataFrame(feature_array, columns=feature_columns)
     if int_to_label is not None:
-        # Map integer labels to class names for the label column
         df['label'] = [int_to_label[label] for label in labels]
     else:
-        # If no mapping is provided, use integer labels
         df['label'] = labels
-        
-    # Save features to CSV
-    csv_filename = f"{split_name}_resnet_features.csv"
-    df.to_csv(csv_filename, index=False)
-    print(f"ResNet feature extraction and saving completed for '{split_name}' split. Saved to '{csv_filename}'.")
+
+    print(f"ResNet feature extraction completed for '{split_name}' split.")
 
     return df
+
+
+def compute_resnet_features(dataset_splits, splits_to_process, batch_size=16, save_csv=True, output_dir="features"):
+    """
+    Generalized function to process and extract ResNet features for given dataset splits and save them to a 'features' subdirectory.
+
+    Args:
+        dataset_splits (dict): Dictionary containing dataset splits ('train', 'val', 'test').
+        splits_to_process (list): List of dataset splits to process (e.g., ['train', 'val', 'test']).
+        batch_size (int): Batch size for feature extraction.
+        save_csv (bool): Whether to save the resulting DataFrame to a CSV file.
+        output_dir (str): Directory where CSV files will be saved (default is 'features').
+
+    Returns:
+        dict: Dictionary with DataFrames of extracted features for each processed split.
+    """
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Collect all unique labels from the splits
+    all_labels = []
+    for split in dataset_splits.values():
+        all_labels.extend(split['labels'])
+
+    unique_classes = sorted(set(all_labels))
+    label_to_int = {class_name: idx for idx, class_name in enumerate(unique_classes)}
+    int_to_label = {idx: class_name for class_name, idx in label_to_int.items()}
+    print("Label to integer mapping:", label_to_int)
+
+    # Function to convert labels to integers
+    def convert_labels_to_int(split_data):
+        return {
+            'images': split_data['images'],
+            'labels': [label_to_int[label] for label in split_data['labels']]
+        }
+
+    # Extract features for each requested split
+    extracted_features = {}
+    for split_name in splits_to_process:
+        if split_name not in dataset_splits:
+            print(f"Skipping '{split_name}' as it is not in the dataset splits.")
+            continue
+
+        print(f"Processing {split_name} split...")
+        split_data_int = convert_labels_to_int(dataset_splits[split_name])
+
+        # Extract ResNet features for the split
+        df = extract_resnet_features_split(
+            split_data_int,
+            split_name,
+            batch_size=batch_size,
+            num_classes=len(unique_classes),
+            int_to_label=int_to_label
+        )
+
+        # Save to 'features' subdirectory if required
+        if save_csv:
+            output_path = os.path.join(output_dir, f"{split_name}_resnet_features.csv")
+            df.to_csv(output_path, index=False)
+            print(f"Saved {split_name} features to '{output_path}'.")
+
+        extracted_features[split_name] = df
+
+    return extracted_features
