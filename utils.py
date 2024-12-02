@@ -36,9 +36,15 @@ def load_split_images(
     image_paths = []
     for domain in sorted(os.listdir(img_dir)):
         domain_path = os.path.join(img_dir, domain)
+        if domain == '.DS_Store':
+                continue
         for label in sorted(os.listdir(domain_path)):
+            if label == '.DS_Store':
+                continue
             label_path = os.path.join(domain_path, label)
             for filename in sorted(os.listdir(label_path)):
+                if filename == '.DS_Store':
+                    continue
                 img_path = os.path.join(label_path, filename)
                 
                 domains.append(domain)
