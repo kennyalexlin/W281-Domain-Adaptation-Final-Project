@@ -708,7 +708,7 @@ def extract_resnet_features_split(split_data, split_name, batch_size=16, device=
         pd.DataFrame: DataFrame containing ResNet features and labels.
     """
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu")
 
     # Define transformations for ResNet101
     transform = transforms.Compose([
