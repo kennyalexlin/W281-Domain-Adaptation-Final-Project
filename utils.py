@@ -850,6 +850,7 @@ def get_orb_features(
     scoreType=0,
     n_clusters=200,
     kmeans=None,
+    transformer=None
 ):
     desc = []
     desc_flat = []
@@ -893,7 +894,9 @@ def get_orb_features(
         
     features = np.stack(sparse)
     
-    transformer = TfidfTransformer()
-    features = transformer.fit_transform(features).toarray()
+    if transformer is None:
+        transformer = TfidfTransformer()
+        transformer.fit(features)
+    features = transformer.transform(features).toarray()
     
-    return features, kmeans
+    return features, kmeans, transformer
