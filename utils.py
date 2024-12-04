@@ -10,6 +10,8 @@ from typing import Tuple
 from skimage.feature import local_binary_pattern, graycomatrix, graycoprops
 from skimage.filters import gabor  
 from skimage.color import rgb2gray
+from sklearn.cluster import KMeans
+from sklearn.feature_extraction.text import TfidfTransformer
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
@@ -64,6 +66,7 @@ def load_split_images(
     train_domains = ["amazon", "caltech10"], 
     test_val_split = 0.5,
     seed = 888) -> Tuple[Tuple, Tuple, Tuple]:
+    # NOTE: no longer used. Only necessary prior to images being standardized.
     """ Loops through a directory and returns a tuple for train, val, and test splits respectively.
         Each tuple is of the form (domains, labels, image_paths, images)
         
@@ -155,14 +158,20 @@ def load_images_by_domain(img_dir, target_size=(300, 300), method="pad", seed=88
     data_by_domain = {}
 
     for domain in sorted(os.listdir(img_dir)):
+        if domain == '.DS_Store':
+            continue
         domain_path = os.path.join(img_dir, domain)
         images = []
         labels = []
 
         for label in sorted(os.listdir(domain_path)):
+            if label == '.DS_Store':
+                continue
             label_path = os.path.join(domain_path, label)
 
             for filename in sorted(os.listdir(label_path)):
+                if filename == '.DS_Store':
+                    continue
                 img_path = os.path.join(label_path, filename)
                 image = cv.imread(img_path)
                 if image is not None:
@@ -832,3 +841,59 @@ def compute_resnet_features(dataset_splits, splits_to_process, batch_size=16, sa
         extracted_features[split_name] = df
 
     return extracted_features
+
+def get_orb_features(
+    imgs,
+    nfeatures=500,
+    patchSize=10,
+    scaleFactor=1.2,
+    scoreType=0,
+    n_clusters=200,
+    kmeans=None,
+):
+    desc = []
+    desc_flat = []
+    orb = cv.ORB_create(
+        nfeatures=nfeatures, 
+        edgeThreshold=patchSize, 
+        patchSize=patchSize,
+        scaleFactor=scaleFactor,
+        scoreType=scoreType
+    )
+    print("Getting ORB keypoints...")
+    for idx, img in enumerate(tqdm(imgs)):
+        # convert to grayscale only to reduce impact of differences in hue
+        # try/except because some imgs are already in grayscale
+        try:
+            img = cv.cvtColor(img, cv.COLOR_BGR2GRAY) 
+        except:
+            pass
+        keypoints = orb.detect(img)
+        keypoints, descriptors = orb.compute(img, keypoints)
+        to_add = []
+        if descriptors is not None:
+            to_add = descriptors.tolist()
+        desc.append(to_add)
+        desc_flat = desc_flat + to_add
+    
+    # if no kmeans is provided, fit a new one
+    if kmeans is None:
+        print(f"No kmeans was provided, so fitting a new one...")
+        kmeans = KMeans(random_state=88, n_clusters=n_clusters)
+        kmeans.fit(desc_flat)
+        
+    dense = [kmeans.predict(i) if len(i) else [] for i in desc]
+    
+    sparse = []
+    for vw_dense in dense:
+        vw_sparse = np.zeros(n_clusters)
+        for vw in vw_dense:
+            vw_sparse[vw] += 1
+        sparse.append(vw_sparse)
+        
+    features = np.stack(sparse)
+    
+    transformer = TfidfTransformer()
+    features = transformer.fit_transform(features).toarray()
+    
+    return features, kmeans
