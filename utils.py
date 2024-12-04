@@ -485,6 +485,63 @@ def convert_to_grayscale(image):
         raise ValueError(f"Unexpected image shape: {image.shape}")
     return image
 
+
+def convert_to_RGB(image):
+    """
+    Convert an image to RGB if it's in grayscale or RGBA format.
+
+    Args:
+        image (np.array): Input image.
+
+    Returns:
+        np.array: Grayscale image.
+    """
+    if len(image.shape) == 3:
+        if image.shape[2] == 1:
+            # Convert Grayscale to RGB
+            image = cv.cvtColor(image, cv.COLOR_GRAY2RGB)
+        elif image.shape[2] == 4:
+            # convert RGBA to RGB
+            image = cv.cvtColor(image, cv.COLOR_BGRA2RGB)
+    elif len(image.shape) == 4:
+        # Handle images with multiple channels, e.g., batch size
+        # This depends on your data structure; adjust accordingly
+        raise ValueError(f"Unexpected image shape: {image.shape}")
+    return image
+
+
+def extract_RGB_features(split_data):
+    """Extracts mean RGB color channel features from a dataset of images.
+
+    Args:
+        split_data (dict): A dictionary containing 'images' and 'labels'. 
+                           'images' is a list of image data, and 'labels' is a list of corresponding labels.
+    Returns:
+        pd.DataFrame: A DataFrame containing the mean intensity features for each color channel (red, green, blue) 
+                      and the corresponding labels.
+    """
+    features = []
+    labels = split_data['labels']
+
+    print(f"Extracting mean color channel features from {len(split_data['images'])} images...")
+
+    for img in tqdm(split_data['images']):
+        # Convert to RGB if needed
+        img_rgb = convert_to_RGB(img)
+
+        # Compute mean intensity for each color channel
+        mean_intensities = get_mean_intensity_rgb(img_rgb)
+        features.append(mean_intensities)
+    
+    # Create DataFrame
+    feature_columns = ["mean_intensity_red", "mean_intensity_green", "mean_intensity_blue"]
+    df = pd.DataFrame(features, columns=feature_columns)
+    df['label'] = labels
+    return df
+
+
+
+
 def compute_multiscale_lbp_features(image, PR_combinations):
     """
     Compute multi-scale LBP features from an image.
