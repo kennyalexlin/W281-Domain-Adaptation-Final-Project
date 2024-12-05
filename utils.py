@@ -488,6 +488,9 @@ def convert_to_grayscale(image):
     Returns:
         np.array: Grayscale image.
     """
+    if not isinstance(image, np.ndarray):
+        raise ValueError(f"Expected np.ndarray, got {type(image)}")
+
     if len(image.shape) == 3:
         if image.shape[2] == 4:
             # Convert RGBA to Grayscale
@@ -496,8 +499,6 @@ def convert_to_grayscale(image):
             # Convert BGR to Grayscale
             image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
     elif len(image.shape) == 4:
-        # Handle images with multiple channels, e.g., batch size
-        # This depends on your data structure; adjust accordingly
         raise ValueError(f"Unexpected image shape: {image.shape}")
     return image
 
@@ -537,7 +538,6 @@ def extract_lbp_features(split_data, PR_combinations):
     print(f"Extracting LBP features from {len(split_data['images'])} images...")
 
     for img in tqdm(split_data['images']):
-        # Ensure the image is grayscale and in uint8 format
         img_gray = convert_to_grayscale(img)
         img_gray = (img_gray * 255).astype(np.uint8) if img_gray.max() <= 1.0 else img_gray.astype(np.uint8)
 
