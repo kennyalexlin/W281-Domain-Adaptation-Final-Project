@@ -502,6 +502,58 @@ def convert_to_grayscale(image):
         raise ValueError(f"Unexpected image shape: {image.shape}")
     return image
 
+def convert_to_RGB(image):
+    """
+    Convert an image to RGB if it's in grayscale or RGBA format.
+
+    Args:
+        image (np.array): Input image.
+
+    Returns:
+        np.array: Grayscale image.
+    """
+    if len(image.shape) == 3:
+        if image.shape[2] == 1:
+            # Convert Grayscale to RGB
+            image = cv.cvtColor(image, cv.COLOR_GRAY2RGB)
+        elif image.shape[2] == 4:
+            # convert RGBA to RGB
+            image = cv.cvtColor(image, cv.COLOR_BGRA2RGB)
+    elif len(image.shape) == 4:
+        # Handle images with multiple channels, e.g., batch size
+        # This depends on your data structure; adjust accordingly
+        raise ValueError(f"Unexpected image shape: {image.shape}")
+    return image
+
+def extract_RGB_features(split_data):
+    """Extracts mean RGB color channel features from a dataset of images.
+
+    Args:
+        split_data (dict): A dictionary containing 'images' and 'labels'. 
+                           'images' is a list of image data, and 'labels' is a list of corresponding labels.
+    Returns:
+        pd.DataFrame: A DataFrame containing the mean intensity features for each color channel (red, green, blue) 
+                      and the corresponding labels.
+    """
+    features = []
+    labels = split_data['labels']
+
+    print(f"Extracting mean color channel features from {len(split_data['images'])} images...")
+
+    for img in tqdm(split_data['images']):
+        # Convert to RGB if needed
+        img_rgb = convert_to_RGB(img)
+
+        # Compute mean intensity for each color channel
+        mean_intensities = get_mean_intensity_rgb(img_rgb)
+        features.append(mean_intensities)
+    
+    # Create DataFrame
+    feature_columns = ["mean_intensity_red", "mean_intensity_green", "mean_intensity_blue"]
+    df = pd.DataFrame(features, columns=feature_columns)
+    df['label'] = labels
+    return df
+
 def compute_multiscale_lbp_features(image, PR_combinations):
     """
     Compute multi-scale LBP features from an image.
@@ -777,23 +829,18 @@ def extract_resnet_features_split(split_data, split_name, batch_size=16, device=
     return df
 
 
-def compute_resnet_features(dataset_splits, splits_to_process, batch_size=16, save_csv=True, output_dir="features"):
+def compute_resnet_features(dataset_splits, splits_to_process, batch_size=16):
     """
-    Generalized function to process and extract ResNet features for given dataset splits and save them to a 'features' subdirectory.
+    Generalized function to process and extract ResNet features for given dataset splits.
 
     Args:
         dataset_splits (dict): Dictionary containing dataset splits ('train', 'val', 'test').
         splits_to_process (list): List of dataset splits to process (e.g., ['train', 'val', 'test']).
         batch_size (int): Batch size for feature extraction.
-        save_csv (bool): Whether to save the resulting DataFrame to a CSV file.
-        output_dir (str): Directory where CSV files will be saved (default is 'features').
 
     Returns:
         dict: Dictionary with DataFrames of extracted features for each processed split.
     """
-    # Ensure the output directory exists
-    os.makedirs(output_dir, exist_ok=True)
-
     # Collect all unique labels from the splits
     all_labels = []
     for split in dataset_splits.values():
@@ -832,15 +879,7 @@ def compute_resnet_features(dataset_splits, splits_to_process, batch_size=16, sa
             int_to_label=int_to_label
         )
 
-        # Save to 'features' subdirectory if required
-        if save_csv:
-            # Add domain information to the filename if available
-            domain_prefix = dataset_splits[split_name].get("domain", "").lower()
-            filename_prefix = f"{domain_prefix}_" if domain_prefix else ""
-            output_path = os.path.join(output_dir, f"{filename_prefix}{split_name}_resnet_features.csv")
-            df.to_csv(output_path, index=False)
-            print(f"Saved {split_name} features to '{output_path}'.")
-
+        # Add the DataFrame to the dictionary
         extracted_features[split_name] = df
 
     return extracted_features
