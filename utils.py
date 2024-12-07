@@ -613,7 +613,7 @@ def compute_gabor_features(image, frequencies, angles):
     Compute Gabor features for an image at multiple frequencies and angles.
     
     Args:
-        image (np.array): Grayscale image
+        image (np.array): Grayscale image (normalized to [0, 1] or [0, 255])
         frequencies (list): List of frequencies for Gabor filter
         angles (list): List of angles (in radians) for Gabor filter
 
@@ -624,7 +624,10 @@ def compute_gabor_features(image, frequencies, angles):
     for frequency in frequencies:
         for angle in angles:
             real, imag = gabor(image, frequency=frequency, theta=angle)
-            magnitude = np.sqrt(real**2 + imag**2)
+            magnitude = np.sqrt(real**2 + imag**2).astype(np.float64) 
+            
+            # Apply logarithmic transformation to prevent overflow
+            magnitude = np.log1p(magnitude)
             
             # Compute statistical features for the magnitude response
             gabor_features.extend([
