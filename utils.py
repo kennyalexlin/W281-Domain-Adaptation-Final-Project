@@ -503,12 +503,9 @@ def convert_to_grayscale(image):
     return image
 
 def convert_to_RGB(image):
-    """
-    Convert an image to RGB if it's in grayscale or RGBA format.
-
+    """Convert an image to RGB if it's in grayscale or RGBA format.
     Args:
         image (np.array): Input image.
-
     Returns:
         np.array: Grayscale image.
     """
@@ -520,8 +517,7 @@ def convert_to_RGB(image):
             # convert RGBA to RGB
             image = cv.cvtColor(image, cv.COLOR_BGRA2RGB)
     elif len(image.shape) == 4:
-        # Handle images with multiple channels, e.g., batch size
-        # This depends on your data structure; adjust accordingly
+        # Catch-all in case images have an extra channel (like for batch size)
         raise ValueError(f"Unexpected image shape: {image.shape}")
     return image
 
