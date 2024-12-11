@@ -434,8 +434,8 @@ def get_mean_intensity_grayscale(imgs: np.ndarray) -> list:
 
 
 
-def plot_color_histogram(imgs, label, intensity_filter: list = [0, 256]) -> plt.figure:
-    """Plots the color histogram of an image and returns the plot figure.
+def plot_color_histogram(imgs, label = "", intensity_filter: list = [0, 256], ax=None) -> plt.Axes:
+    """Plots the color histogram of an image and returns the plot axis.
 
     This function generates and plots the histogram for each color channel (red, green, and blue) of the input image.
     It also fills the area under the histogram curve with a semi-transparent color. The x-axis represents the intensity
@@ -446,18 +446,21 @@ def plot_color_histogram(imgs, label, intensity_filter: list = [0, 256]) -> plt.
         label (str): The label or title for the histogram plot.
         pixel_value_range (list): The range of pixel values to consider when plotting the histogram. 
                                   Default is [0, 256].
-            This is a cheap easy way to omit the all white pixels, might want to improve this later on. 
+        ax (matplotlib.axes.Axes, optional): The axis on which to plot the histogram. If None, a new figure and axis are created.
 
     Returns:
-        (matplotlib.figure.Figure): The figure object containing the histogram plot.
+        (matplotlib.axes.Axes): The axis object containing the histogram plot.
     """
     # If the input is a single image, convert it to a list of images
     if isinstance(imgs, np.ndarray):
         imgs = [imgs]
+    print(imgs[0].shape)
 
     colors = ('r', 'g', 'b')
 
-    plt.figure(figsize=(5, 5))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(5, 5))
+
     for i, color_channel in enumerate(colors):
         histr = cv.calcHist(
             images = imgs,
@@ -466,17 +469,23 @@ def plot_color_histogram(imgs, label, intensity_filter: list = [0, 256]) -> plt.
             histSize = [intensity_filter[1] - intensity_filter[0]], 
             ranges = intensity_filter,
         )
-        plt.plot(histr, color = color_channel)
-        plt.fill_between(
+        # histr = histr / histr.sum()  # Normalize the histogram
+        ax.plot(histr, color = color_channel)
+        ax.fill_between(
             range(len(histr)),
             histr[:, 0], 
             color=color_channel, 
             alpha=0.1
         )
 
-    plt.xlim(intensity_filter)
-    plt.title(f'Color Histogram - {label}')
-    return plt.gca()
+    ax.set_xlim(intensity_filter)
+    # ax.set_ylim([0, 1])
+    ax.set_title(f'Color Histogram - {label}')
+    ax.set_xlabel('Intensity Value')
+    ax.set_ylabel('Frequency')
+
+    return ax
+
 
 def convert_to_grayscale(image):
     """
